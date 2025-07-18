@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ArrowLeft, Send } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { Message, User } from '@/types/maintenance';
 import ImageUploadButton from './ImageUploadButton';
+import ImageMarkupEditor from './ImageMarkupEditor';
 
 interface ConversationViewProps {
   messages: Message[];
@@ -22,6 +23,9 @@ const ConversationView: React.FC<ConversationViewProps> = ({
 }) => {
   const [newMessage, setNewMessage] = useState('');
   const [selectedImage, setSelectedImage] = useState<string>('');
+  const [showImageEditor, setShowImageEditor] = useState(false);
+  const [tempImageForEditing, setTempImageForEditing] = useState<string>('');
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const handleSend = () => {
     if (newMessage.trim() || selectedImage) {
@@ -31,6 +35,16 @@ const ConversationView: React.FC<ConversationViewProps> = ({
     }
   };
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (scrollContainer) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      }
+    }
+  }, [messages]);
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -39,28 +53,36 @@ const ConversationView: React.FC<ConversationViewProps> = ({
   };
 
   const handleImageSelect = (imageUrl: string) => {
-    setSelectedImage(imageUrl);
+    setTempImageForEditing(imageUrl);
+    setShowImageEditor(true);
+  };
+
+  const handleImageSave = (editedImageUrl: string) => {
+    setSelectedImage(editedImageUrl);
+    setShowImageEditor(false);
+    setTempImageForEditing('');
+  };
+
+  const handleImageCancel = () => {
+    setShowImageEditor(false);
+    setTempImageForEditing('');
   };
 
   return (
     <div className="flex flex-col h-full bg-gray-900 rounded-lg">
       <div className="flex items-center p-4 border-b border-gray-700">
-        <Button variant="ghost" onClick={onBack} className="text-white hover:bg-gray-800">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-        <h2 className="text-xl font-bold text-white ml-4">
+        <h2 className="text-xl font-bold text-white">
           {messages[0]?.subject || 'Conversation'}
         </h2>
       </div>
 
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
         <div className="space-y-4">
           {messages.map((message, index) => {
             const isFromCurrentUser = message.from === currentUser.name;
             return (
               <div
-                key={`${message.id}-${index}`}
+                key={message.id || `temp-${index}-${message.createdAt.getTime()}`}
                 className={`flex ${isFromCurrentUser ? 'justify-end' : 'justify-start'}`}
               >
                 <Card
@@ -131,6 +153,15 @@ const ConversationView: React.FC<ConversationViewProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* Image Markup Editor */}
+      {showImageEditor && tempImageForEditing && (
+        <ImageMarkupEditor
+          imageUrl={tempImageForEditing}
+          onSave={handleImageSave}
+          onCancel={handleImageCancel}
+        />
+      )}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import { User, Checklist, MaintenanceRequest, Message, Alert, MessageReply } from '@/types/maintenance';
 import { toast } from '@/components/ui/use-toast';
+import { alertService } from '@/services/AlertService';
 
 export const createAppContextMethods = (
   user: User | null,
@@ -19,7 +20,7 @@ export const createAppContextMethods = (
   setEditingChecklist: (checklist: Checklist | null) => void,
   supabaseMethods: any
 ) => {
-  const { saveUser, saveChecklist, saveRequest, deleteUser: dbDeleteUser, deleteChecklist: dbDeleteChecklist, deleteRequest: dbDeleteRequest } = supabaseMethods || {};
+  const { saveUser, saveChecklist, saveRequest, saveMessage, deleteMessages, markMessageAsRead: dbMarkMessageAsRead, deleteUser: dbDeleteUser, deleteChecklist: dbDeleteChecklist, deleteRequest: dbDeleteRequest } = supabaseMethods || {};
 
   const login = (userData: User) => {
     setUser(userData);
@@ -47,6 +48,36 @@ export const createAppContextMethods = (
               completed: !item.completed,
               completedBy: !item.completed ? user.initials : undefined,
               completedAt: !item.completed ? new Date() : undefined
+            };
+          }
+          return item;
+        })
+      : checklist.items;
+
+    const updatedChecklist = { ...checklist, items: updatedItems };
+    if (saveChecklist) {
+      await saveChecklist(updatedChecklist);
+    }
+    setChecklists(prev => prev.map(c => c.id === checklistId ? updatedChecklist : c));
+  };
+
+  const toggleChecklistItemNonCompliant = async (checklistId: string, itemId: string, reason?: string) => {
+    if (!user || (user.role !== 'admin' && user.role !== 'authorized')) return;
+    
+    const checklist = checklists.find(c => c.id === checklistId);
+    if (!checklist) return;
+
+    const updatedItems = Array.isArray(checklist.items) && typeof checklist.items[0] === 'object' 
+      ? (checklist.items as any[]).map((item: any) => {
+          if (item.id === itemId) {
+            return {
+              ...item,
+              nonCompliant: reason ? true : false,
+              nonComplianceReason: reason || '',
+              completed: false,
+              completedBy: reason ? user.initials : undefined,
+              completedAt: reason ? new Date() : undefined,
+              hasNotes: !!(reason && reason.trim())
             };
           }
           return item;
@@ -91,7 +122,76 @@ export const createAppContextMethods = (
       await saveChecklist(newChecklist);
     }
     setChecklists(prev => prev.map(c => c.id === checklistId ? newChecklist : c));
-    toast({ title: 'Checklist completed!' });
+    
+    // If this is a recurring checklist, create a new instance
+    if (updatedChecklist.recurring && updatedChecklist.frequency) {
+      const getNextDueDate = (freq: 'daily' | 'weekly' | 'monthly'): Date => {
+        const now = new Date();
+        switch (freq) {
+          case 'daily':
+            return new Date(now.getTime() + 24 * 60 * 60 * 1000); // +1 day
+          case 'weekly':
+            return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // +7 days
+          case 'monthly':
+            const nextMonth = new Date(now);
+            nextMonth.setMonth(nextMonth.getMonth() + 1);
+            return nextMonth;
+          default:
+            return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        }
+      };
+      
+      const generateUUID = () => {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          const r = Math.random() * 16 | 0;
+          const v = c == 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
+      };
+      
+      // Reset all items to not completed
+      const resetItems = (items: any[]) => {
+        return items.map(item => ({
+          ...item,
+          completed: false,
+          completedBy: undefined,
+          completedAt: undefined,
+          nonCompliant: false,
+          nonComplianceReason: '',
+          hasNotes: false
+        }));
+      };
+      
+      const recurringChecklist = {
+        ...updatedChecklist,
+        id: generateUUID(),
+        status: 'pending' as const,
+        createdAt: new Date(),
+        startedAt: undefined,
+        completedAt: undefined,
+        nextDueDate: getNextDueDate(updatedChecklist.frequency),
+        items: resetItems(Array.isArray(updatedChecklist.items) ? updatedChecklist.items : [])
+      };
+      
+      try {
+        if (saveChecklist) {
+          await saveChecklist(recurringChecklist);
+        }
+        setChecklists(prev => [...prev, recurringChecklist]);
+        toast({ 
+          title: 'Checklist completed!', 
+          description: 'Next recurring checklist created automatically.'
+        });
+      } catch (error) {
+        console.error('Error creating recurring checklist:', error);
+        toast({ 
+          title: 'Checklist completed!', 
+          description: 'Could not create next recurring checklist.'
+        });
+      }
+    } else {
+      toast({ title: 'Checklist completed!' });
+    }
   };
 
   const addMaintenanceRequest = async (requestData: Omit<MaintenanceRequest, 'id' | 'createdAt'>) => {
@@ -108,21 +208,66 @@ export const createAppContextMethods = (
     toast({ title: 'Maintenance request submitted!' });
   };
 
-  const addMessage = (messageData: Omit<Message, 'id' | 'createdAt' | 'read'>) => {
-    const newMessage: Message = {
-      ...messageData,
-      id: Date.now().toString(),
-      createdAt: new Date(),
-      read: false
-    };
-    setMessages(prev => [...prev, newMessage]);
-    toast({ title: 'Message sent!' });
+  const addMessage = async (msgData: { subject: string; content: string; to: string[]; type: Message['type']; threadId?: string; imageUrl?: string; }) => {
+    if (!user || !saveMessage) return;
+    
+    try {
+      const recipientUsers = users.filter(u => msgData.to.includes(u.name));
+      const savedMessage = await saveMessage({
+        ...msgData,
+        from: user.name,
+        senderId: user.id,
+        recipientIds: recipientUsers.map(u => u.id)
+      });
+      
+      setMessages(prev => [...prev, savedMessage]);
+      toast({ title: 'Message sent successfully' });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast({ title: 'Error sending message', variant: 'destructive' });
+    }
   };
 
-  const markMessageAsRead = (messageId: string) => {
+  const markMessageAsRead = async (messageId: string) => {
     setMessages(prev => prev.map(msg => 
       msg.id === messageId ? { ...msg, read: true } : msg
     ));
+    
+    if (dbMarkMessageAsRead) {
+      try {
+        await dbMarkMessageAsRead(messageId);
+      } catch (error) {
+        console.error('Error marking message as read:', error);
+      }
+    }
+  };
+
+  const deleteThread = async (threadKey: string) => {
+    try {
+      // Find all messages in the thread
+      const threadMessages = messages.filter(msg => 
+        (msg.threadId || msg.id) === threadKey
+      );
+      
+      if (threadMessages.length === 0) return;
+      
+      const messageIds = threadMessages.map(msg => msg.id);
+      
+      // Delete from database
+      if (deleteMessages) {
+        await deleteMessages(messageIds);
+      }
+      
+      // Remove from local state
+      setMessages(prev => prev.filter(msg => 
+        !messageIds.includes(msg.id)
+      ));
+      
+      toast({ title: 'Conversation deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting thread:', error);
+      toast({ title: 'Error deleting conversation', variant: 'destructive' });
+    }
   };
 
   const markAlertAsRead = (alertId: string) => {
@@ -256,15 +401,51 @@ export const createAppContextMethods = (
     setRequests(prev => prev.map(r => r.id === updatedRequest.id ? updatedRequest : r));
   };
 
+  // Alert management methods
+  const createCustomAlert = (alertData: Omit<Alert, 'id' | 'createdAt' | 'read' | 'showCount'>) => {
+    const newAlert = alertService.createCustomAlert(alertData);
+    setAlerts(prev => [...prev, newAlert]);
+    return newAlert;
+  };
+
+  const runAlertChecks = () => {
+    const newAlerts = alertService.runAutomaticChecks(checklists, requests);
+    if (newAlerts.length > 0) {
+      setAlerts(prev => {
+        const existingIds = prev.map(a => a.id);
+        const uniqueNewAlerts = newAlerts.filter(a => !existingIds.includes(a.id));
+        return [...prev, ...uniqueNewAlerts];
+      });
+    }
+  };
+
+  const cleanupAlerts = () => {
+    setAlerts(prev => alertService.cleanupExpiredAlerts(prev));
+  };
+
+  const dismissAlert = (alertId: string) => {
+    setAlerts(prev => prev.filter(a => a.id !== alertId));
+  };
+
+  const snoozeAlert = (alertId: string, duration: number) => {
+    setAlerts(prev => prev.map(alert => 
+      alert.id === alertId 
+        ? { ...alert, lastShown: new Date(), showCount: (alert.showCount || 0) + 1 }
+        : alert
+    ));
+  };
+
   return {
     login,
     logout,
     toggleChecklistItem,
+    toggleChecklistItemNonCompliant,
     startChecklist,
     completeChecklist,
     addMaintenanceRequest,
     addMessage,
     markMessageAsRead,
+    deleteThread,
     markAlertAsRead,
     replyToMessage,
     forwardMessage,
@@ -277,6 +458,11 @@ export const createAppContextMethods = (
     updateChecklist,
     addChecklist,
     addRequest,
-    updateRequest
+    updateRequest,
+    createCustomAlert,
+    runAlertChecks,
+    cleanupAlerts,
+    dismissAlert,
+    snoozeAlert
   };
 };

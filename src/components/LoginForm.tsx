@@ -40,7 +40,16 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
         u.initials.toLowerCase() === username.toLowerCase()
       );
       
-      if (user && password === 'password123') {
+      if (user && user.password && password === user.password) {
+        onLogin(user);
+        setTimeout(() => {
+          toast({ 
+            title: `Welcome, ${user.name}!`,
+            className: "fixed bottom-4 right-4 z-50"
+          });
+        }, 100);
+      } else if (user && !user.password && password === 'password123') {
+        // Fallback for users without passwords set
         onLogin(user);
         setTimeout(() => {
           toast({ 

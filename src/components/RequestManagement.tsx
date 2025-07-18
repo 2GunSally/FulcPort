@@ -86,30 +86,30 @@ export const RequestManagement: React.FC = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-80 min-w-80">
-                  <div className="whitespace-nowrap">Title</div>
-                  <div className="text-xs text-gray-500 font-normal whitespace-nowrap">(Click to view.)</div>
+                <TableHead>
+                  Title
+                  <div className="text-xs text-gray-500 font-normal">(Click to view.)</div>
                 </TableHead>
-                <TableHead className="whitespace-nowrap">Department</TableHead>
-                <TableHead className="whitespace-nowrap">Priority</TableHead>
-                <TableHead className="whitespace-nowrap">Status</TableHead>
-                <TableHead className="whitespace-nowrap">Requested By</TableHead>
-                <TableHead className="whitespace-nowrap">Created</TableHead>
-                <TableHead className="whitespace-nowrap">Actions</TableHead>
+                <TableHead>Department</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Requested By</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {requests.map((request) => (
                 <TableRow key={request.id}>
                   <TableCell className="font-medium">
-                    <div 
-                      className="font-semibold cursor-pointer hover:text-blue-600 hover:underline whitespace-nowrap overflow-hidden text-ellipsis"
+                    <button 
+                      className="text-left hover:text-blue-600 hover:underline transition-colors"
                       onClick={() => handleTitleClick(request)}
                     >
                       {request.title}
-                    </div>
+                    </button>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">{request.department}</TableCell>
+                  <TableCell>{request.department}</TableCell>
                   <TableCell>
                     <Badge className={getPriorityBadgeColor(request.priority)}>
                       {request.priority}
@@ -121,13 +121,13 @@ export const RequestManagement: React.FC = () => {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1 whitespace-nowrap">
+                    <div className="flex items-center gap-1">
                       <User className="h-3 w-3" />
                       <span className="text-sm">{request.requestedBy}</span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1 whitespace-nowrap">
+                    <div className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
                       <span className="text-sm">
                         {request.createdAt ? new Date(request.createdAt).toLocaleDateString() : 'N/A'}
@@ -135,7 +135,7 @@ export const RequestManagement: React.FC = () => {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1">
+                    <div className="flex space-x-2">
                       <Button 
                         variant="outline" 
                         size="sm"

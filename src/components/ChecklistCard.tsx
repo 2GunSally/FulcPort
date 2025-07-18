@@ -10,6 +10,7 @@ interface ChecklistCardProps {
   checklist: Checklist;
   user: User;
   onItemToggle: (checklistId: string, itemId: string) => void;
+  onItemNonCompliantToggle: (checklistId: string, itemId: string, reason?: string) => void;
   onStartChecklist: (checklistId: string) => void;
   onCompleteChecklist: (checklistId: string) => void;
 }
@@ -18,6 +19,7 @@ const ChecklistCard: React.FC<ChecklistCardProps> = ({
   checklist,
   user,
   onItemToggle,
+  onItemNonCompliantToggle,
   onStartChecklist,
   onCompleteChecklist
 }) => {
@@ -96,6 +98,7 @@ const ChecklistCard: React.FC<ChecklistCardProps> = ({
           }
         : item
     ));
+    onItemNonCompliantToggle(checklist.id, itemId, reason);
   };
 
   const handleViewNotes = (itemId: string) => {

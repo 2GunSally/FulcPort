@@ -21,11 +21,13 @@ interface AppContextType {
   setCurrentView: (view: string) => void;
   setEditingChecklist: (checklist: Checklist | null) => void;
   toggleChecklistItem: (checklistId: string, itemId: string) => void;
+  toggleChecklistItemNonCompliant: (checklistId: string, itemId: string, reason?: string) => void;
   startChecklist: (checklistId: string) => void;
   completeChecklist: (checklistId: string) => void;
   addMaintenanceRequest: (request: Omit<MaintenanceRequest, 'id' | 'createdAt'>) => void;
-  addMessage: (message: Omit<Message, 'id' | 'createdAt' | 'read'>) => void;
+  addMessage: (message: { subject: string; content: string; to: string[]; type: Message['type']; threadId?: string; imageUrl?: string; }) => Promise<void>;
   markMessageAsRead: (messageId: string) => void;
+  deleteThread: (threadKey: string) => Promise<void>;
   markAlertAsRead: (alertId: string) => void;
   replyToMessage: (messageId: string, content: string) => void;
   forwardMessage: (messageId: string, to: string[], subject: string, content: string) => void;
@@ -39,6 +41,13 @@ interface AppContextType {
   addChecklist: (checklist: Checklist) => void;
   addRequest: (request: MaintenanceRequest) => void;
   updateRequest: (request: MaintenanceRequest) => void;
+  createCustomAlert: (alertData: Omit<Alert, 'id' | 'createdAt' | 'read' | 'showCount'>) => Alert;
+  runAlertChecks: () => void;
+  cleanupAlerts: () => void;
+  dismissAlert: (alertId: string) => void;
+  snoozeAlert: (alertId: string, duration: number) => void;
+  registerBackHandler: (handler: () => boolean) => void;
+  unregisterBackHandler: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -51,7 +60,6 @@ export const useAppContext = () => {
   return context;
 };
 
-const mockMessages: Message[] = [];
 const mockAlerts: Alert[] = [];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -59,15 +67,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [users, setUsers] = useState<User[]>([]);
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
-  const [messages, setMessages] = useState<Message[]>(mockMessages);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>(mockAlerts);
   const [selectedDepartment, setSelectedDepartment] = useState('All');
   const [currentView, setCurrentView] = useState('dashboard');
   const [editingChecklist, setEditingChecklist] = useState<Checklist | null>(null);
   const [loading, setLoading] = useState(true);
+  const [backHandler, setBackHandler] = useState<(() => boolean) | null>(null);
   
   const supabaseContext = useSupabase();
-  const { loadUsers, loadChecklists, loadRequests } = supabaseContext || {};
+  const { loadUsers, loadChecklists, loadRequests, loadMessages, saveMessage, deleteMessages, markMessageAsRead } = supabaseContext || {};
 
   useEffect(() => {
     if (loadUsers && loadChecklists && loadRequests) {
@@ -76,6 +85,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setLoading(false);
     }
   }, [loadUsers, loadChecklists, loadRequests]);
+
+  // Initialize alert system
+  useEffect(() => {
+    if (checklists.length > 0 && requests.length > 0) {
+      const methods = createAppContextMethods(
+        user, setUser, users, setUsers, checklists, setChecklists,
+        requests, setRequests, messages, setMessages, alerts, setAlerts,
+        setSelectedDepartment, setCurrentView, setEditingChecklist, supabaseContext
+      );
+      
+      // Run initial alert checks
+      methods.runAlertChecks();
+      
+      // Set up periodic checks every 5 minutes
+      const interval = setInterval(() => {
+        methods.runAlertChecks();
+        methods.cleanupAlerts();
+      }, 300000); // 5 minutes
+
+      return () => clearInterval(interval);
+    }
+  }, [checklists, requests, user]);
+
+  // Load messages when user changes
+  useEffect(() => {
+    if (user && loadMessages) {
+      loadUserMessages();
+    }
+  }, [user, loadMessages]);
+
+  const loadUserMessages = async () => {
+    if (!user || !loadMessages) return;
+    
+    try {
+      const messagesData = await loadMessages(user.id);
+      setMessages(messagesData);
+    } catch (error) {
+      console.error('Error loading messages:', error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -95,6 +144,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } finally {
       setLoading(false);
     }
+  };
+
+  const registerBackHandler = (handler: () => boolean) => {
+    setBackHandler(() => handler);
+  };
+
+  const unregisterBackHandler = () => {
+    setBackHandler(null);
   };
 
   const methods = createAppContextMethods(
@@ -119,6 +176,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedDepartment,
         setCurrentView,
         setEditingChecklist,
+        registerBackHandler,
+        unregisterBackHandler,
         ...methods
       }}
     >

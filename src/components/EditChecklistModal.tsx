@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, X } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DEPARTMENTS } from '@/types/maintenance';
 import { useAppContext } from '@/contexts/AppContext';
 import { toast } from '@/components/ui/use-toast';
@@ -34,6 +35,7 @@ const EditChecklistModal: React.FC<EditChecklistModalProps> = ({
   const [frequency, setFrequency] = useState('daily');
   const [assignedTo, setAssignedTo] = useState('');
   const [items, setItems] = useState<ChecklistItemInput[]>([{ id: '1', description: '' }]);
+  const [recurring, setRecurring] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -43,11 +45,13 @@ const EditChecklistModal: React.FC<EditChecklistModalProps> = ({
         setFrequency('daily');
         setAssignedTo('');
         setItems([{ id: '1', description: '' }]);
+        setRecurring(false);
       } else {
         setTitle(checklist.title || '');
         setDepartment(checklist.department || '');
         setFrequency(checklist.frequency || 'daily');
         setAssignedTo(checklist.assignedTo || '');
+        setRecurring(checklist.recurring || false);
         
         if (checklist.items && checklist.items.length > 0) {
           const processedItems = checklist.items.map((item, index) => {
@@ -131,6 +135,23 @@ const EditChecklistModal: React.FC<EditChecklistModalProps> = ({
         completed: false
       }));
     
+    // Calculate next due date if recurring
+    const getNextDueDate = (freq: 'daily' | 'weekly' | 'monthly'): Date => {
+      const now = new Date();
+      switch (freq) {
+        case 'daily':
+          return new Date(now.getTime() + 24 * 60 * 60 * 1000); // +1 day
+        case 'weekly':
+          return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // +7 days
+        case 'monthly':
+          const nextMonth = new Date(now);
+          nextMonth.setMonth(nextMonth.getMonth() + 1);
+          return nextMonth;
+        default:
+          return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      }
+    };
+
     const checklistData = {
       title: title.trim(),
       department,
@@ -138,7 +159,9 @@ const EditChecklistModal: React.FC<EditChecklistModalProps> = ({
       assignedTo: assignedTo || undefined,
       assignedToName: assignedUser?.name || undefined,
       items: validItems,
-      status: 'pending' as const
+      status: 'pending' as const,
+      recurring: recurring,
+      nextDueDate: recurring ? getNextDueDate(frequency as 'daily' | 'weekly' | 'monthly') : undefined
     };
 
     try {
@@ -236,6 +259,22 @@ const EditChecklistModal: React.FC<EditChecklistModalProps> = ({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="recurring"
+                checked={recurring}
+                onCheckedChange={setRecurring}
+              />
+              <Label htmlFor="recurring" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                Recurring checklist
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              When checked, this checklist will automatically recreate itself based on the selected frequency after completion.
+            </p>
           </div>
 
           <div className="space-y-4">

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAppContext } from '@/contexts/AppContext';
 import LoginForm from './LoginForm';
 import Sidebar from './Sidebar';
@@ -24,20 +24,50 @@ const AppLayout: React.FC = () => {
     setSelectedDepartment,
     setCurrentView,
     toggleChecklistItem,
+    toggleChecklistItemNonCompliant,
     startChecklist,
     completeChecklist,
     addMaintenanceRequest,
     updateRequest,
-    loading
+    loading,
+    registerBackHandler,
+    unregisterBackHandler
   } = useAppContext();
   
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [navigationHistory, setNavigationHistory] = useState<string[]>(['dashboard']);
+  const [customBackHandler, setCustomBackHandler] = useState<(() => boolean) | null>(null);
 
-  // Handle browser back button
+  const handleBackNavigation = useCallback(() => {
+    // Check if there's a custom back handler (e.g., for sub-navigation)
+    if (customBackHandler && customBackHandler()) {
+      return; // Custom handler handled the back action
+    }
+    
+    // Default navigation history handling
+    if (navigationHistory.length > 1) {
+      const newHistory = navigationHistory.slice(0, -1);
+      const previousView = newHistory[newHistory.length - 1];
+      setNavigationHistory(newHistory);
+      setCurrentView(previousView);
+    } else {
+      setCurrentView('dashboard');
+    }
+  }, [customBackHandler, navigationHistory, setCurrentView]);
+
+  // Handle browser/Android back button
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
       event.preventDefault();
+      
+      // Check if there's a custom back handler (e.g., for sub-navigation)
+      if (customBackHandler && customBackHandler()) {
+        // Custom handler handled the back action, push a new state to maintain history
+        window.history.pushState({ view: currentView }, '', window.location.href);
+        return;
+      }
+      
+      // Default navigation history handling
       handleBackNavigation();
     };
 
@@ -46,7 +76,7 @@ const AppLayout: React.FC = () => {
     
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [customBackHandler, currentView, handleBackNavigation]);
 
   // Update history when view changes
   useEffect(() => {
@@ -57,15 +87,13 @@ const AppLayout: React.FC = () => {
     }
   }, [currentView]);
 
-  const handleBackNavigation = () => {
-    if (navigationHistory.length > 1) {
-      const newHistory = navigationHistory.slice(0, -1);
-      const previousView = newHistory[newHistory.length - 1];
-      setNavigationHistory(newHistory);
-      setCurrentView(previousView);
-    } else {
-      setCurrentView('dashboard');
-    }
+  // Register and unregister back handlers
+  const registerCustomBackHandler = (handler: () => boolean) => {
+    setCustomBackHandler(() => handler);
+  };
+  
+  const unregisterCustomBackHandler = () => {
+    setCustomBackHandler(null);
   };
 
   if (loading) {
@@ -142,7 +170,7 @@ const AppLayout: React.FC = () => {
               variant="ghost"
               size="sm"
               onClick={handleBackNavigation}
-              className="flex items-center space-x-1 text-green-700 hover:text-green-800 hover:bg-green-200 p-1"
+              className="flex items-center space-x-1 text-green-700 hover:text-green-700 hover:bg-transparent p-1"
             >
               <ArrowLeft className="h-3 w-3" />
               <span className="text-xs">Back</span>
@@ -162,7 +190,12 @@ const AppLayout: React.FC = () => {
               />
             )}
             
-            {currentView === 'messages' && <MessagesView />}
+            {currentView === 'messages' && (
+              <MessagesView 
+                onRegisterBackHandler={registerCustomBackHandler}
+                onUnregisterBackHandler={unregisterCustomBackHandler}
+              />
+            )}
             {currentView === 'alerts' && <AlertsView />}
             
             {currentView === 'checklists' && (
@@ -170,6 +203,7 @@ const AppLayout: React.FC = () => {
                 checklists={checklists}
                 user={user}
                 onItemToggle={toggleChecklistItem}
+                onItemNonCompliantToggle={toggleChecklistItemNonCompliant}
                 onStartChecklist={startChecklist}
                 onCompleteChecklist={completeChecklist}
               />

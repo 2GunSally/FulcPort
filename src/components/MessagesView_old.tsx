@@ -25,7 +25,7 @@ const MessagesView: React.FC<MessagesViewProps> = ({
   onRegisterBackHandler,
   onUnregisterBackHandler 
 }) => {
-  const { user, users, messages, addMessage, deleteThread } = useAppContext();
+  const { user, users, messages, addMessage } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   
@@ -54,35 +54,89 @@ const MessagesView: React.FC<MessagesViewProps> = ({
       onUnregisterBackHandler();
     }
   }, [selectedConversation, onRegisterBackHandler, onUnregisterBackHandler]);
-
+  const [conversations, setConversations] = useState<{[key: string]: Message[]}>({});
+  const [loadedMessages, setLoadedMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState({ 
     subject: '', 
     content: '', 
     to: [] as string[]
   });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState<string>('');
   const [showImageEditor, setShowImageEditor] = useState(false);
   const [tempImageForEditing, setTempImageForEditing] = useState<string>('');
 
-  // Group messages into conversations
-  const conversations = useMemo(() => {
-    const groupedMessages: {[key: string]: Message[]} = {};
+  useEffect(() => {
+    loadMessages();
+  }, [user]);
+
+  // Update conversations when messages change
+  useEffect(() => {
+    if (loadedMessages.length > 0) {
+      const groupedMessages: {[key: string]: Message[]} = {};
+      
+      loadedMessages.forEach(msg => {
+        const conversationKey = msg.threadId || msg.id;
+        if (!groupedMessages[conversationKey]) {
+          groupedMessages[conversationKey] = [];
+        }
+        groupedMessages[conversationKey].push(msg);
+      });
+      
+      Object.keys(groupedMessages).forEach(key => {
+        groupedMessages[key].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      });
+      
+      setConversations(groupedMessages);
+    }
+  }, [loadedMessages]);
+
+  const loadMessages = async () => {
+    if (!user) return;
     
-    messages.forEach(msg => {
-      const conversationKey = msg.threadId || msg.id;
-      if (!groupedMessages[conversationKey]) {
-        groupedMessages[conversationKey] = [];
-      }
-      groupedMessages[conversationKey].push(msg);
-    });
-    
-    Object.keys(groupedMessages).forEach(key => {
-      groupedMessages[key].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-    });
-    
-    return groupedMessages;
-  }, [messages]);
+    try {
+      setLoading(true);
+      console.log('Loading messages for user:', user.id);
+      
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`sender_id.eq.${user.id},recipient_ids.cs.{${user.id}}`)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      console.log('Loaded messages data:', data);
+      console.log('Number of messages found:', data?.length || 0);
+
+      const messages: Message[] = [];
+      
+      data?.forEach(msg => {
+        const message: Message = {
+          id: msg.id,
+          subject: msg.subject,
+          content: msg.content,
+          from: msg.sender_name,
+          to: msg.recipient_names,
+          type: msg.message_type,
+          read: msg.is_read,
+          createdAt: new Date(msg.created_at),
+          threadId: msg.thread_id,
+          imageUrl: msg.image_url
+        };
+        
+        messages.push(message);
+      });
+      
+      setLoadedMessages(messages);
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      toast({ title: 'Error loading messages', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSendMessage = async () => {
     if ((!newMessage.subject || !newMessage.content) && !selectedImage || newMessage.to.length === 0 || !user) {
@@ -90,24 +144,45 @@ const MessagesView: React.FC<MessagesViewProps> = ({
     }
 
     try {
-      let imageUrl = selectedImage;
+      const recipientUsers = users.filter(u => newMessage.to.includes(u.name));
+      const recipientIds = recipientUsers.map(u => u.id);
       
-      // Upload image if it's a data URL
-      if (selectedImage && selectedImage.startsWith('data:')) {
-        imageUrl = await uploadImageFromDataURL(selectedImage);
-      }
-      
-      await addMessage({
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          subject: newMessage.subject,
+          content: newMessage.content,
+          sender_id: user.id,
+          sender_name: user.name,
+          recipient_ids: recipientIds,
+          recipient_names: newMessage.to,
+          message_type: 'general',
+          image_url: selectedImage || null
+        });
+
+      if (error) throw error;
+
+      // Create the message object for local state
+      const newMessageObj: Message = {
+        id: Math.random().toString(36).substr(2, 9), // Temporary ID
         subject: newMessage.subject,
         content: newMessage.content,
+        from: user.name,
         to: newMessage.to,
         type: 'general',
-        imageUrl: imageUrl || undefined
-      });
+        read: false,
+        createdAt: new Date(),
+        imageUrl: selectedImage || undefined
+      };
       
+      // Add to AppContext
+      await addMessage(newMessageObj);
+      
+      toast({ title: 'Message sent successfully' });
       setNewMessage({ subject: '', content: '', to: [] });
       setSelectedImage('');
       setIsDialogOpen(false);
+      loadMessages();
     } catch (error) {
       console.error('Error sending message:', error);
       toast({ title: 'Error sending message', variant: 'destructive' });
@@ -125,21 +200,47 @@ const MessagesView: React.FC<MessagesViewProps> = ({
     const otherParticipants = allParticipants.filter(name => name !== user.name);
     
     try {
-      let finalImageUrl = imageUrl;
+      const recipientUsers = users.filter(u => otherParticipants.includes(u.name));
+      const recipientIds = recipientUsers.map(u => u.id);
       
-      // Upload image if it's a data URL
-      if (imageUrl && imageUrl.startsWith('data:')) {
-        finalImageUrl = await uploadImageFromDataURL(imageUrl);
-      }
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          subject: originalMessage.subject,
+          content: content,
+          sender_id: user.id,
+          sender_name: user.name,
+          recipient_ids: recipientIds,
+          recipient_names: otherParticipants,
+          message_type: 'general',
+          thread_id: selectedConversation,
+          image_url: imageUrl
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
       
-      await addMessage({
-        subject: originalMessage.subject,
-        content: content,
-        to: otherParticipants,
-        type: 'general',
-        threadId: selectedConversation,
-        imageUrl: finalImageUrl
-      });
+      // Immediately add the new message to local state
+      const replyMessage: Message = {
+        id: data.id,
+        subject: data.subject,
+        content: data.content,
+        from: data.sender_name,
+        to: data.recipient_names,
+        type: data.message_type,
+        read: data.is_read,
+        createdAt: new Date(data.created_at),
+        threadId: data.thread_id,
+        imageUrl: data.image_url
+      };
+      
+      // Add to AppContext
+      await addMessage(replyMessage);
+      
+      // Update local messages state
+      setLoadedMessages(prev => [...prev, replyMessage]);
+      
     } catch (error) {
       console.error('Error sending reply:', error);
       toast({ title: 'Error sending reply', variant: 'destructive' });
@@ -148,9 +249,30 @@ const MessagesView: React.FC<MessagesViewProps> = ({
 
   const handleDeleteThread = async (threadKey: string) => {
     try {
-      await deleteThread(threadKey);
+      const threadMessages = conversations[threadKey];
+      if (!threadMessages || threadMessages.length === 0) return;
+
+      // Delete all messages in the thread
+      const messageIds = threadMessages.map(msg => msg.id);
+      
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .in('id', messageIds);
+
+      if (error) throw error;
+
+      // Remove the conversation from local state
+      setConversations(prev => {
+        const updated = { ...prev };
+        delete updated[threadKey];
+        return updated;
+      });
+
+      toast({ title: 'Conversation deleted successfully' });
     } catch (error) {
       console.error('Error deleting thread:', error);
+      toast({ title: 'Error deleting conversation', variant: 'destructive' });
     }
   };
 
@@ -308,7 +430,9 @@ const MessagesView: React.FC<MessagesViewProps> = ({
       </div>
 
       <div className="space-y-4">
-        {filteredConversations.length === 0 ? (
+        {loading ? (
+          <div className="text-center text-white">Loading messages...</div>
+        ) : filteredConversations.length === 0 ? (
           <Card className="bg-white">
             <CardContent className="text-center py-8">
               <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />

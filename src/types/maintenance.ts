@@ -34,6 +34,8 @@ export interface Checklist {
   assignedTo?: string;
   createdBy?: string;
   createdAt?: Date;
+  recurring?: boolean;
+  nextDueDate?: Date;
 }
 
 export interface MaintenanceRequest {
@@ -76,11 +78,54 @@ export interface Alert {
   id: string;
   title: string;
   message: string;
-  type: 'overdue' | 'critical' | 'urgent' | 'info';
+  type: 'overdue' | 'critical' | 'urgent' | 'info' | 'custom' | 'maintenance' | 'safety' | 'system';
+  severity: 'low' | 'medium' | 'high' | 'critical';
   createdAt: Date;
   read: boolean;
   relatedId?: string;
-  relatedType?: 'checklist' | 'request';
+  relatedType?: 'checklist' | 'request' | 'user' | 'system';
+  department?: string;
+  assignedTo?: string[];
+  expiresAt?: Date;
+  dismissible: boolean;
+  persistent: boolean;
+  frequency?: 'once' | 'daily' | 'weekly' | 'monthly';
+  lastShown?: Date;
+  showCount?: number;
+  maxShows?: number;
+  createdBy?: string;
+  actionRequired?: boolean;
+  customColor?: string;
+}
+
+export interface AlertSettings {
+  id: string;
+  overdueChecklistsEnabled: boolean;
+  overdueChecklistsThreshold: number; // hours
+  criticalRequestsEnabled: boolean;
+  criticalRequestsThreshold: number; // hours
+  maintenanceWindowEnabled: boolean;
+  maintenanceWindowStart: string; // time
+  maintenanceWindowEnd: string; // time
+  equipmentFailureEnabled: boolean;
+  safetyIncidentEnabled: boolean;
+  complianceDeadlineEnabled: boolean;
+  complianceDeadlineThreshold: number; // days
+  customAlertsEnabled: boolean;
+  defaultAlertDuration: number; // hours
+  defaultShowFrequency: 'once' | 'daily' | 'weekly' | 'monthly';
+  defaultMaxShows: number;
+  autoDeleteExpired: boolean;
+  emailNotifications: boolean;
+  departmentFiltering: boolean;
+  severityColors: {
+    low: string;
+    medium: string;
+    high: string;
+    critical: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export const DEPARTMENTS = [

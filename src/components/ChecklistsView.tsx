@@ -11,6 +11,7 @@ interface ChecklistsViewProps {
   checklists: Checklist[];
   user: User;
   onItemToggle: (checklistId: string, itemId: string) => void;
+  onItemNonCompliantToggle: (checklistId: string, itemId: string, reason?: string) => void;
   onStartChecklist: (checklistId: string) => void;
   onCompleteChecklist: (checklistId: string) => void;
 }
@@ -19,6 +20,7 @@ const ChecklistsView: React.FC<ChecklistsViewProps> = ({
   checklists,
   user,
   onItemToggle,
+  onItemNonCompliantToggle,
   onStartChecklist,
   onCompleteChecklist
 }) => {
@@ -112,6 +114,7 @@ const ChecklistsView: React.FC<ChecklistsViewProps> = ({
             checklist={checklist}
             user={user}
             onItemToggle={onItemToggle}
+            onItemNonCompliantToggle={onItemNonCompliantToggle}
             onStartChecklist={onStartChecklist}
             onCompleteChecklist={onCompleteChecklist}
           />

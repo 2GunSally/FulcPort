@@ -8,18 +8,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, UserPlus, Key, ChevronRight } from 'lucide-react';
+import { Plus, Edit, Trash2, UserPlus, Key, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { useAppContext } from '@/contexts/AppContext';
 import { User, DEPARTMENTS } from '@/types/maintenance';
 import { toast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/supabase';
 
 export const UserManagement: React.FC = () => {
   const { users, addUser, updateUser, deleteUser } = useAppContext();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [passwordUser, setPasswordUser] = useState<User | null>(null);
-  const [newPassword, setNewPassword] = useState('');
+  const [editedPassword, setEditedPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [newUser, setNewUser] = useState({
     name: '',
     initials: '',
@@ -36,7 +37,7 @@ export const UserManagement: React.FC = () => {
     }
 
     const user: User = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       name: newUser.name,
       initials: newUser.initials,
       role: newUser.role,
@@ -47,8 +48,7 @@ export const UserManagement: React.FC = () => {
     };
 
     try {
-      await supabase.from('users').insert([user]);
-      addUser(user);
+      await addUser(user);
       setNewUser({ name: '', initials: '', role: 'employee', department: '', permissions: [], password: '' });
       setIsAddDialogOpen(false);
       toast({ title: 'Success', description: 'User added successfully' });
@@ -60,8 +60,7 @@ export const UserManagement: React.FC = () => {
 
   const handleUpdateUser = async (user: User) => {
     try {
-      await supabase.from('users').update(user).eq('id', user.id);
-      updateUser(user);
+      await updateUser(user);
       setEditingUser(null);
       toast({ title: 'Success', description: 'User updated successfully' });
     } catch (error) {
@@ -71,15 +70,15 @@ export const UserManagement: React.FC = () => {
   };
 
   const handlePasswordChange = async () => {
-    if (!newPassword || !passwordUser) return;
+    if (!editedPassword || !passwordUser) return;
     
-    const updatedUser = { ...passwordUser, password: newPassword };
+    const updatedUser = { ...passwordUser, password: editedPassword };
     
     try {
-      await supabase.from('users').update({ password: newPassword }).eq('id', passwordUser.id);
-      updateUser(updatedUser);
+      await updateUser(updatedUser);
       setPasswordUser(null);
-      setNewPassword('');
+      setEditedPassword('');
+      setShowNewPassword(false);
       toast({ title: 'Success', description: 'Password updated successfully' });
     } catch (error) {
       console.error('Password update error:', error);
@@ -89,8 +88,7 @@ export const UserManagement: React.FC = () => {
 
   const handleDeleteUser = async (userId: string) => {
     try {
-      await supabase.from('users').delete().eq('id', userId);
-      deleteUser(userId);
+      await deleteUser(userId);
       toast({ title: 'Success', description: 'User deleted successfully' });
     } catch (error) {
       console.error('Delete user error:', error);
@@ -143,7 +141,10 @@ export const UserManagement: React.FC = () => {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <Button variant="outline" size="sm" onClick={() => setPasswordUser(user)}>
+                  <Button variant="outline" size="sm" onClick={() => {
+                    setPasswordUser(user);
+                    setEditedPassword(user.password || '');
+                  }}>
                     <Key className="h-4 w-4 mr-1" />
                     Change
                   </Button>
@@ -235,13 +236,24 @@ export const UserManagement: React.FC = () => {
               </div>
               <div>
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  placeholder="Enter password"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={newUser.password}
+                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    placeholder="Enter password"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
               <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
@@ -303,23 +315,34 @@ export const UserManagement: React.FC = () => {
 
         {/* Password Change Dialog */}
         {passwordUser && (
-          <Dialog open={!!passwordUser} onOpenChange={() => setPasswordUser(null)}>
+          <Dialog open={!!passwordUser} onOpenChange={() => { setPasswordUser(null); setEditedPassword(''); setShowNewPassword(false); }}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Change Password for {passwordUser.name}</DialogTitle>
+                <DialogTitle>Edit Password for {passwordUser.name}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label>New Password</Label>
-                  <Input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Enter new password"
-                  />
+                  <Label>Password</Label>
+                  <div className="relative">
+                    <Input
+                      type={showNewPassword ? "text" : "password"}
+                      value={editedPassword || passwordUser.password || ''}
+                      onChange={(e) => setEditedPassword(e.target.value)}
+                      placeholder="Enter password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex justify-end space-x-2">
-                  <Button variant="outline" onClick={() => { setPasswordUser(null); setNewPassword(''); }}>Cancel</Button>
+                  <Button variant="outline" onClick={() => { setPasswordUser(null); setEditedPassword(''); setShowNewPassword(false); }}>Cancel</Button>
                   <Button onClick={handlePasswordChange}>Update Password</Button>
                 </div>
               </div>

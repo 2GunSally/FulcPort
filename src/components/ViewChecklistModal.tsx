@@ -47,13 +47,22 @@ const ViewChecklistModal: React.FC<ViewChecklistModalProps> = ({
   if (!checklist) return null;
 
   const handleToggleComplete = (itemId: string) => {
-    setItems(prev => prev.map(item => 
+    const newItems = items.map(item => 
       item.id === itemId ? { ...item, completed: !item.completed, nonCompliant: false } : item
-    ));
+    );
+    
+    setItems(newItems);
+    
+    // Save the checklist immediately when completion state changes
+    const updatedChecklist = {
+      ...checklist,
+      items: newItems
+    };
+    updateChecklist(updatedChecklist);
   };
 
   const handleToggleNonCompliant = (itemId: string, reason?: string) => {
-    setItems(prev => prev.map(item => {
+    const newItems = items.map(item => {
       if (item.id === itemId) {
         if (reason) {
           return {
@@ -73,7 +82,16 @@ const ViewChecklistModal: React.FC<ViewChecklistModalProps> = ({
         }
       }
       return item;
-    }));
+    });
+    
+    setItems(newItems);
+    
+    // Save the checklist immediately when non-compliant state changes
+    const updatedChecklist = {
+      ...checklist,
+      items: newItems
+    };
+    updateChecklist(updatedChecklist);
   };
 
   const handleViewNotes = (itemId: string) => {

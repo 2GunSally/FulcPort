@@ -6,7 +6,8 @@ import { UserManagement } from '@/components/UserManagement';
 import { ChecklistManagement } from '@/components/ChecklistManagement';
 import { RequestManagement } from '@/components/RequestManagement';
 import { SystemSettings } from '@/components/SystemSettings';
-import { Users, ClipboardList, Settings, AlertTriangle } from 'lucide-react';
+import { AlertSettingsComponent } from '@/components/AlertSettings';
+import { Users, ClipboardList, Settings, AlertTriangle, Bell } from 'lucide-react';
 import { useAppContext } from '@/contexts/AppContext';
 
 export const AdminPanel: React.FC = () => {
@@ -30,27 +31,40 @@ export const AdminPanel: React.FC = () => {
       <h1 className="text-3xl font-bold">Admin Panel</h1>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="settings" className="flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            Settings
-          </TabsTrigger>
-          <TabsTrigger value="checklists" className="flex items-center gap-2">
-            <ClipboardList className="h-4 w-4" />
-            Checklists
-          </TabsTrigger>
-          <TabsTrigger value="requests" className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            Requests
-          </TabsTrigger>
-          <TabsTrigger value="users" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Users
-          </TabsTrigger>
-        </TabsList>
+        <div className="space-y-2">
+          <TabsList className="grid w-full grid-cols-3 gap-1">
+            <TabsTrigger value="settings" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Settings
+            </TabsTrigger>
+            <TabsTrigger value="alerts" className="flex items-center gap-2">
+              <Bell className="h-4 w-4" />
+              Alerts
+            </TabsTrigger>
+            <TabsTrigger value="checklists" className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Checklists
+            </TabsTrigger>
+          </TabsList>
+          <TabsList className="grid w-full grid-cols-3 gap-1">
+            <TabsTrigger value="requests" className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              Requests
+            </TabsTrigger>
+            <TabsTrigger value="users" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Users
+            </TabsTrigger>
+            <div></div>
+          </TabsList>
+        </div>
 
         <TabsContent value="settings">
           <SystemSettings />
+        </TabsContent>
+
+        <TabsContent value="alerts">
+          <AlertSettingsComponent />
         </TabsContent>
 
         <TabsContent value="checklists">

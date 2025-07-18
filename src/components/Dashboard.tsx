@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, Wrench, MessageSquare, Bell, Settings } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CheckSquare, Wrench, MessageSquare, Bell, Settings, BarChart3, Activity } from 'lucide-react';
 import DashboardStats from './DashboardStats';
+import EnhancedDashboardStats from './EnhancedDashboardStats';
 import RecentActivity from './RecentActivity';
 import { useAppContext } from '@/contexts/AppContext';
 
@@ -15,6 +17,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ onViewChecklists, onViewRequests, onViewMessages, onViewAlerts, onViewAdmin }) => {
   const { checklists, requests, messages, alerts, user } = useAppContext();
+  const [dashboardView, setDashboardView] = useState<'overview' | 'analytics'>('overview');
 
   const completedToday = checklists.filter(c => c.status === 'completed').length;
   const inProgress = checklists.filter(c => c.status === 'in-progress').length;
@@ -39,8 +42,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChecklists, onViewRequests,
   ];
 
   return (
-    <div className="bg-gray-900 rounded-lg p-6 text-white">
-      <div className="space-y-6">
+    <div className="space-y-6">
+      {/* Header with Navigation */}
+      <div className="bg-gray-900 rounded-lg p-6 text-white">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-white mb-6">Maintenance Management System</h1>
           <div className="grid grid-cols-2 md:grid-cols-2 gap-4 max-w-2xl mx-auto mb-4">
@@ -97,16 +101,37 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChecklists, onViewRequests,
             </div>
           )}
         </div>
+      </div>
 
-        <DashboardStats
-          completedToday={completedToday}
-          inProgress={inProgress}
-          openRequests={openRequests}
-          totalChecklists={totalChecklists}
-          criticalRequests={criticalRequests}
-        />
+      {/* Dashboard Analytics Toggle */}
+      <div className="bg-white rounded-lg p-6">
+        <Tabs value={dashboardView} onValueChange={(value) => setDashboardView(value as any)}>
+          <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsTrigger value="overview" className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Analytics
+            </TabsTrigger>
+          </TabsList>
 
-        <RecentActivity activities={recentActivities} />
+          <TabsContent value="overview" className="space-y-6">
+            <DashboardStats
+              completedToday={completedToday}
+              inProgress={inProgress}
+              openRequests={openRequests}
+              totalChecklists={totalChecklists}
+              criticalRequests={criticalRequests}
+            />
+            <RecentActivity activities={recentActivities} />
+          </TabsContent>
+
+          <TabsContent value="analytics">
+            <EnhancedDashboardStats />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
